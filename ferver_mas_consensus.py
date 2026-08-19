@@ -4,13 +4,19 @@ Multi-Agent System (MAS) for FEVER Claim Verification with AgentScope
 
 Architecture
 ------------
-- 4 LLM agents, fully connected (all-to-all) via AgentScope's MsgHub.
-- Round 0: each agent independently produces a first verdict, OUTSIDE the
-  MsgHub, so there is no cross-talk contaminating the initial vote.
-- If no supermajority forms, agents enter deliberation rounds INSIDE a
-  MsgHub: every agent's reply is auto-broadcast to every other agent
-  (true all-to-all, no manual message routing code needed), so each
-  agent revises its vote in light of its peers' arguments.
+- 4 LLM agents, fully connected (all-to-all) via explicit broadcast.
+  The installed AgentScope version (see `dependencies/agentscope`) exposes a
+  single unified `Agent` class with no `MsgHub`/`InMemoryMemory` any more, so
+  the old "auto-broadcast inside a MsgHub" trick is replaced with explicit
+  `Agent.observe()` calls that inject a Moderator recap into every agent's
+  own context.
+- Round 0: each agent independently produces a first verdict via its own
+  `reply()` call, with no recap injected beforehand, so there is no
+  cross-talk contaminating the initial vote.
+- If no supermajority forms, agents enter deliberation rounds: after each
+  round a Moderator recap (every agent's label/confidence/reasoning) is
+  broadcast to all 4 agents via `observe()`, so each agent revises its vote
+  in light of its peers' arguments on the next round.
 - Consensus rule: Byzantine-style quorum. With n=4 agents you can only
   safely tolerate f=1 unreliable/hallucinating vote (n >= 3f+1), so a
   verdict is finalized only once >= 3 of 4 agents agree.
@@ -23,13 +29,26 @@ FEVER uses the labels SUPPORTS / REFUTES / NOT ENOUGH INFO internally;
 we map those to True / False / "Not enough info" at the very end.
 
 Install:
-    pip install agentscope
+    The `dependencies/agentscope` checkout is used directly (editable/local
+    install), not the PyPI `agentscope` package - its `Agent`/`OpenAIChatModel`
+    API has diverged significantly from the old ReActAgent/MsgHub API.
 
-Requires an LLM API key in the environment, e.g.:
-    export OPENAI_API_KEY=...
-(swap OpenAIChatModel/OpenAIChatFormatter below for DashScopeChatModel,
-AnthropicChatModel, etc. if you use a different provider - AgentScope
-supports many out of the box.)
+LLM backend: a local vLLM server exposing an OpenAI-compatible API, e.g.:
+    vllm serve Qwen/Qwen3-32B-FP8 \
+        --port 8000 \
+        --max-model-len 32768 \
+        --enable-auto-tool-choice \
+        --tool-call-parser hermes \
+        --reasoning-parser qwen3
+
+Since vLLM's server is OpenAI-compatible, we keep AgentScope's
+OpenAIChatModel and just point its OpenAICredential at the local server via
+`base_url` (see VLLM_BASE_URL/VLLM_MODEL_NAME below) instead of
+api.openai.com. Structured output is produced via tool-calling (a
+`_GenerateStructuredOutput` tool AgentScope injects automatically), which is
+why vLLM needs `--enable-auto-tool-choice --tool-call-parser hermes`. No
+real API key is needed - vLLM doesn't check it by default, so a placeholder
+value is used.
 """
 
 import asyncio
@@ -39,13 +58,27 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from agentscope.agent import ReActAgent
-from agentscope.formatter import OpenAIChatFormatter
-from agentscope.memory import InMemoryMemory
-from agentscope.message import Msg
+from agentscope.agent import Agent
+from agentscope.credential import OpenAICredential
+from agentscope.message import UserMsg
 from agentscope.model import OpenAIChatModel
-from agentscope.pipeline import MsgHub
 from agentscope.tool import Toolkit
+
+
+# ---------------------------------------------------------------------
+# 0. Local vLLM server config (OpenAI-compatible endpoint)
+#    Started with e.g.:
+#      vllm serve Qwen/Qwen3-32B-FP8 --port 8000 --max-model-len 32768 \
+#          --enable-auto-tool-choice --tool-call-parser hermes \
+#          --reasoning-parser qwen3
+# ---------------------------------------------------------------------
+VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://localhost:8000/v1")
+VLLM_MODEL_NAME = os.environ.get("VLLM_MODEL_NAME", "Qwen/Qwen3-32B-FP8")
+VLLM_CONTEXT_SIZE = int(os.environ.get("VLLM_CONTEXT_SIZE", "32768"))
+# vLLM doesn't check the API key by default; the OpenAI client just needs
+# a non-empty string. Override VLLM_API_KEY if you've configured vLLM
+# with --api-key.
+VLLM_API_KEY = os.environ.get("VLLM_API_KEY", "EMPTY")
 
 
 # ---------------------------------------------------------------------
@@ -102,10 +135,10 @@ PERSONAS = {
 }
 
 
-def build_agent(name: str, persona: str) -> ReActAgent:
-    return ReActAgent(
+def build_agent(name: str, persona: str) -> Agent:
+    return Agent(
         name=name,
-        sys_prompt=(
+        system_prompt=(
             f"{persona}\n\n"
             "Task: verify a claim against evidence sentences from Wikipedia "
             "(FEVER-style fact verification). Always answer using the "
@@ -115,12 +148,16 @@ def build_agent(name: str, persona: str) -> ReActAgent:
             "explicitly allows it."
         ),
         model=OpenAIChatModel(
-            model_name="gpt-4o-mini",  # swap for any AgentScope-supported model
-            api_key=os.environ["OPENAI_API_KEY"],
+            # Point the OpenAI client at the local vLLM server instead of
+            # api.openai.com.
+            credential=OpenAICredential(
+                api_key=VLLM_API_KEY,
+                base_url=VLLM_BASE_URL,
+            ),
+            model=VLLM_MODEL_NAME,
             stream=False,
+            context_size=VLLM_CONTEXT_SIZE,
         ),
-        formatter=OpenAIChatFormatter(),
-        memory=InMemoryMemory(),
         toolkit=Toolkit(),  # no external tools needed; evidence is given directly
     )
 
@@ -145,6 +182,19 @@ def format_votes(votes: dict[str, Verdict]) -> str:
     return "\n".join(lines)
 
 
+async def broadcast_recap(agents: list[Agent], text: str) -> None:
+    """Inject a Moderator recap into every agent's own context.
+
+    Stands in for the old MsgHub auto-broadcast: agents can only `observe()`
+    plain user/assistant text (raw replies carrying tool-call blocks are
+    rejected), so cross-agent visibility is achieved via a plain-text recap
+    built from each agent's structured verdict, rather than by re-feeding
+    agents' raw reply messages to each other.
+    """
+    recap = UserMsg("Moderator", text)
+    await asyncio.gather(*(agent.observe(recap) for agent in agents))
+
+
 # ---------------------------------------------------------------------
 # 4. The verification pipeline
 # ---------------------------------------------------------------------
@@ -162,64 +212,63 @@ async def verify_claim(
         "Give your independent verdict using the structured schema."
     )
 
-    # ---- Round 0: fully independent votes (no MsgHub -> no cross-talk) ----
-    msg0 = Msg("user", task_prompt, "user")
+    # ---- Round 0: fully independent votes (no recap yet -> no cross-talk) ----
+    msg0 = UserMsg("user", task_prompt)
     round0_replies = await asyncio.gather(
-        *(agent(msg0, structured_model=Verdict) for agent in agents)
+        *(agent.reply(msg0, structured_schema=Verdict) for agent in agents)
     )
-    votes = {agent.name: Verdict(**reply.metadata) for agent, reply in zip(agents, round0_replies)}
+    votes = {
+        agent.name: Verdict(**reply.structured_output)
+        for agent, reply in zip(agents, round0_replies)
+    }
 
     history = [dict(votes)]
     counts = tally(votes)
     winner = check_quorum(counts, quorum)
 
-    # ---- Deliberation rounds: all-to-all via MsgHub ----
+    # ---- Deliberation rounds: all-to-all via explicit recap broadcast ----
     round_no = 0
     if winner is None:
-        async with MsgHub(
-            participants=agents,
-            announcement=Msg(
-                "Moderator",
-                "Round 0 (independent) votes:\n"
-                + format_votes(votes)
-                + "\n\nYou will now see each other's verdicts and reasoning. "
-                "Reconsider your own verdict in light of your peers' "
-                "arguments, but only change your mind if their "
-                "evidence-based reasoning is genuinely more convincing than "
-                "your own.",
-                "system",
-            ),
-        ) as hub:
-            while winner is None and round_no < max_rounds:
-                round_no += 1
-                deliberate_msg = Msg(
-                    "Moderator",
-                    f"Deliberation round {round_no}: give your updated verdict "
-                    "using the structured schema.",
-                    "system",
-                )
-                # Sent identically to all 4 agents -> a synchronous voting
-                # round. Their replies auto-broadcast to each other via
-                # MsgHub as soon as each is generated.
-                replies = await asyncio.gather(
-                    *(agent(deliberate_msg, structured_model=Verdict) for agent in agents)
-                )
-                votes = {agent.name: Verdict(**reply.metadata) for agent, reply in zip(agents, replies)}
-                history.append(dict(votes))
-                counts = tally(votes)
-                winner = check_quorum(counts, quorum)
+        await broadcast_recap(
+            agents,
+            "Round 0 (independent) votes:\n"
+            + format_votes(votes)
+            + "\n\nYou will now see each other's verdicts and reasoning. "
+            "Reconsider your own verdict in light of your peers' "
+            "arguments, but only change your mind if their "
+            "evidence-based reasoning is genuinely more convincing than "
+            "your own.",
+        )
 
-                if winner is None and round_no < max_rounds:
-                    # Explicit recap keeps peer votes legible even though
-                    # they were already auto-broadcast as structured replies.
-                    await hub.broadcast(
-                        Msg(
-                            "Moderator",
-                            f"Round {round_no} votes:\n{format_votes(votes)}\n\n"
-                            "No quorum yet (need 3/4 agreement). One more round.",
-                            "system",
-                        )
-                    )
+        while winner is None and round_no < max_rounds:
+            round_no += 1
+            deliberate_msg = UserMsg(
+                "Moderator",
+                f"Deliberation round {round_no}: give your updated verdict "
+                "using the required schema.",
+            )
+            # Sent identically to all 4 agents -> a synchronous voting
+            # round.
+            replies = await asyncio.gather(
+                *(
+                    agent.reply(deliberate_msg, structured_schema=Verdict)
+                    for agent in agents
+                )
+            )
+            votes = {
+                agent.name: Verdict(**reply.structured_output)
+                for agent, reply in zip(agents, replies)
+            }
+            history.append(dict(votes))
+            counts = tally(votes)
+            winner = check_quorum(counts, quorum)
+
+            if winner is None and round_no < max_rounds:
+                await broadcast_recap(
+                    agents,
+                    f"Round {round_no} votes:\n{format_votes(votes)}\n\n"
+                    "No quorum yet (need 3/4 agreement). One more round.",
+                )
 
     # ---- Fallback: plurality, tie -> NOT_ENOUGH_INFO ----
     if winner is None:
@@ -250,10 +299,6 @@ async def verify_claim(
 #     and you're passing in resolved evidence sentences as a string.)
 # ---------------------------------------------------------------------
 async def main():
-    import agentscope
-
-    agentscope.init()  # optional: sets up logging/studio
-
     sample = {
         "claim": "Nikolaj Coster-Waldau worked with the Fox Broadcasting Company.",
         "evidence": (
