@@ -31,7 +31,6 @@ import glob
 import json
 import os
 import sqlite3
-from typing import Dict, List, Optional, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +83,7 @@ class WikiIndex:
     def __init__(self, db_path: str):
         self.conn = sqlite3.connect(db_path)
 
-    def get_lines(self, page_id: str) -> Optional[str]:
+    def get_lines(self, page_id: str) -> str | None:
         cur = self.conn.execute(
             "SELECT lines FROM documents WHERE id = ?", (page_id,)
         )
@@ -96,7 +95,7 @@ class WikiIndex:
 # 2. Parse one page's `lines` field into {sentence_id: sentence_text}
 # ---------------------------------------------------------------------------
 
-def parse_lines(lines_blob: str) -> Dict[int, str]:
+def parse_lines(lines_blob: str) -> dict[int, str]:
     """
     Each row of `lines` looks like:
         "<idx>\t<sentence text>\t<mention>\t<link>\t<mention>\t<link>..."
@@ -107,7 +106,7 @@ def parse_lines(lines_blob: str) -> Dict[int, str]:
     that index is the authoritative sentence id used in evidence annotations,
     and relying on position breaks silently if any row is blank/malformed.
     """
-    sentences: Dict[int, str] = {}
+    sentences: dict[int, str] = {}
     for row in lines_blob.split("\n"):
         if not row:
             continue
@@ -124,7 +123,7 @@ def parse_lines(lines_blob: str) -> Dict[int, str]:
 # 3. Resolve one claim's evidence to text
 # ---------------------------------------------------------------------------
 
-def get_evidence_sets(claim: dict) -> List[List[Tuple[str, int]]]:
+def get_evidence_sets(claim: dict) -> list[list[tuple[str, int]]]:
     """
     FEVER's `evidence` field is a list of evidence *sets* (multiple
     independently-sufficient justifications can exist per claim). Each set
@@ -141,9 +140,9 @@ def get_evidence_sets(claim: dict) -> List[List[Tuple[str, int]]]:
 
 
 def evidence_text_for_set(
-    pairs: List[Tuple[str, int]],
+    pairs: list[tuple[str, int]],
     wiki: WikiIndex,
-    cache: Dict[str, Dict[int, str]],
+    cache: dict[str, dict[int, str]],
 ) -> str:
     """Resolve one evidence set to a single string (sentences joined with a space)."""
     out = []
@@ -159,7 +158,7 @@ def evidence_text_for_set(
     return " ".join(out)
 
 
-def process_claim(claim: dict, wiki: WikiIndex, cache: Dict[str, Dict[int, str]]) -> dict:
+def process_claim(claim: dict, wiki: WikiIndex, cache: dict[str, dict[int, str]]) -> dict:
     evidence_sets = get_evidence_sets(claim)
     evidence_texts = [evidence_text_for_set(s, wiki, cache) for s in evidence_sets]
 
@@ -186,7 +185,7 @@ def main():
 
     build_sqlite_index(args.wiki_dir, args.index_db)
     wiki = WikiIndex(args.index_db)
-    cache: Dict[str, Dict[int, str]] = {}
+    cache: dict[str, dict[int, str]] = {}
 
     n = 0
     with open(args.claims, encoding="utf-8") as fin, open(args.out, "w", encoding="utf-8") as fout:

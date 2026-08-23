@@ -91,3 +91,11 @@ nvidia-smi
 ```
 
 You should see a process using tens of GB of the B200's memory (matching the ~32GB FP8 weights plus KV cache).
+
+## Datasets
+
+### Preprocessing FEVER Dataset
+
+```bash
+python fever_preprocessing.py --wiki-dir "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/wiki-pages" --claims "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/shared_task_dev.jsonl" --out "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/processed_shared_task_dev.jsonl" --index-db "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/wiki_index.sqlite"
+```
