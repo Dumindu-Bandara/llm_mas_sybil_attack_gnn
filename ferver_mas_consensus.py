@@ -56,6 +56,8 @@ import os
 from collections import Counter
 from typing import Literal, Optional
 
+import json
+
 from pydantic import BaseModel, Field
 
 from agentscope.agent import Agent
@@ -298,7 +300,7 @@ async def verify_claim(
 #     pairs into evidence TEXT; this pipeline assumes that's already done
 #     and you're passing in resolved evidence sentences as a string.)
 # ---------------------------------------------------------------------
-async def main():
+async def example_main():
     sample = {
         "claim": "Nikolaj Coster-Waldau worked with the Fox Broadcasting Company.",
         "evidence": (
@@ -318,5 +320,51 @@ async def main():
     print(f"Final tally: {result['final_tally']}")
 
 
+def main():
+    fever_jsonl_file = "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/shared_task_dev.jsonl"
+    with open(fever_jsonl_file, 'r') as f:
+        data = [json.loads(line) for line in f]
+
+    # NOTE: FEVER data is structured as:
+    # data: List[dict]
+    # Each sample has:
+    # {
+    #     "id": str,
+    #     "claim": str,
+    #     "label": str,  # SUPPORTS | REFUTES | NOT ENOUGH INFO
+    #     "evidence": List[List[int, int, str, int]],
+    # }
+    # where each evidence item is:
+    # [Annotation ID, Evidence ID, Wikipedia URL, sentence ID]
+    # See: https://fever.ai/dataset/fever.html#:~:text=HLT%7D%2C%0A%20%20%20%20year%20%3D%20%7B2018%7D%0A%7D-,Data%20Format,-The%20data%20is
+    
+
+
+    print(len(data), "claims loaded from", fever_jsonl_file)
+
+    correct = 0
+
+    for i, sample in enumerate(data):
+        claim = sample['claim']
+        evidence_parts = [
+            e[2] for e in sample['evidence'][0] if e[2] is not None
+        ]
+        evidence_text = " ".join(evidence_parts)
+        print(f"\nClaim {i+1}/{len(data)}: {claim}")
+        print(f"Evidence: {evidence_text}")
+
+        result = asyncio.run(verify_claim(claim, evidence_text))
+
+        if result['final_output'] == sample['label']:   
+            correct += 1
+
+        if i == 10: 
+            break
+
+    accuracy = correct / len(data)
+    print(f"\nAccuracy on FEVER dev set: {accuracy:.2%} ({correct}/{len(data)})")
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    # asyncio.run(main())
+    main()
