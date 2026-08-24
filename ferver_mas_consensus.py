@@ -321,7 +321,9 @@ async def example_main():
 
 
 def main():
-    fever_jsonl_file = "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/shared_task_dev.jsonl"
+    fever_jsonl_file = "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/processed_shared_task_dev.jsonl"
+
+    # TODO: Test with new processed_shared_task_dev.jsonl file. 
     with open(fever_jsonl_file, 'r') as f:
         data = [json.loads(line) for line in f]
 
@@ -332,12 +334,12 @@ def main():
     #     "id": str,
     #     "claim": str,
     #     "label": str,  # SUPPORTS | REFUTES | NOT ENOUGH INFO
-    #     "evidence": List[List[int, int, str, int]],
+    #     "evidence_sets": List[List[List[Wiki_Page, sentence_ID]]],
+    #     "evidence_text": List[str],
     # }
-    # where each evidence item is:
-    # [Annotation ID, Evidence ID, Wikipedia URL, sentence ID]
-    # See: https://fever.ai/dataset/fever.html#:~:text=HLT%7D%2C%0A%20%20%20%20year%20%3D%20%7B2018%7D%0A%7D-,Data%20Format,-The%20data%20is
-    
+
+    # See: https://fever.ai/dataset/fever.html#:~:text=HLT%7D%2C%0A%20%20%20%20year%20%3D%20%7B2018%7D%0A%7D-,Data%20Format,-The%20data%20is for original data format.
+
 
 
     print(len(data), "claims loaded from", fever_jsonl_file)
