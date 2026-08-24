@@ -346,22 +346,54 @@ def main():
 
     correct = 0
 
+    # Remove the existing results file if it exists
+    if os.path.exists("ferver_mas_consensus_results.jsonl"):
+        os.remove("ferver_mas_consensus_results.jsonl")
+
     for i, sample in enumerate(data):
         claim = sample['claim']
-        evidence_parts = [
-            e[2] for e in sample['evidence'][0] if e[2] is not None
-        ]
-        evidence_text = " ".join(evidence_parts)
+        # evidence_parts = [
+        #     e[2] for e in sample['evidence'][0] if e[2] is not None
+        # ]
+        # evidence_text = " ".join(evidence_parts)
+        evidence_text = " ".join(sample["evidence_text"])
         print(f"\nClaim {i+1}/{len(data)}: {claim}")
+        print(f"Number of evidence sentences: {len(sample['evidence_text'])}")
         print(f"Evidence: {evidence_text}")
+        print(f"Ground truth label: {sample['label']}")
 
         result = asyncio.run(verify_claim(claim, evidence_text))
 
-        if result['final_output'] == sample['label']:   
-            correct += 1
+        # LABEL_TO_OUTPUT = {
+        #     "SUPPORTS": "True",
+        #     "REFUTES": "False",
+        #     "NOT_ENOUGH_INFO": "Not enough info",
+        # }
 
-        if i == 10: 
-            break
+        final_label = result['final_label'].upper()
+        gt_label =  "_".join(sample['label'].split(" "))
+
+        print(f"Final label: {final_label}")
+        print(f"Ground Truth label: {gt_label}")
+
+        if final_label == gt_label:
+            print("Correct!")   
+            correct += 1
+        else:
+            print("Incorrect!")
+
+        with open("ferver_mas_consensus_results.jsonl", "a") as f:
+            out = {
+                "claim": claim,
+                "evidence": evidence_text,
+                "ground_truth_label": gt_label,
+                "final_label": final_label,
+                "final_output": result['final_output'],
+                "rounds_run": result['rounds_run'],
+                "final_tally": result['final_tally'],
+                "correct": final_label == gt_label
+            }
+            f.write(json.dumps(out) + "\n")
 
     accuracy = correct / len(data)
     print(f"\nAccuracy on FEVER dev set: {accuracy:.2%} ({correct}/{len(data)})")
