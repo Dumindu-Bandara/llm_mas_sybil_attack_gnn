@@ -34,21 +34,21 @@ Install:
     API has diverged significantly from the old ReActAgent/MsgHub API.
 
 LLM backend: a local vLLM server exposing an OpenAI-compatible API, e.g.:
-    vllm serve Qwen/Qwen3-32B-FP8 \
+    vllm serve openai/gpt-oss-20b \
         --port 8000 \
         --max-model-len 32768 \
         --enable-auto-tool-choice \
-        --tool-call-parser hermes \
-        --reasoning-parser qwen3
+        --tool-call-parser openai
 
 Since vLLM's server is OpenAI-compatible, we keep AgentScope's
 OpenAIChatModel and just point its OpenAICredential at the local server via
 `base_url` (see VLLM_BASE_URL/VLLM_MODEL_NAME below) instead of
 api.openai.com. Structured output is produced via tool-calling (a
 `_GenerateStructuredOutput` tool AgentScope injects automatically), which is
-why vLLM needs `--enable-auto-tool-choice --tool-call-parser hermes`. No
-real API key is needed - vLLM doesn't check it by default, so a placeholder
-value is used.
+why vLLM needs `--enable-auto-tool-choice --tool-call-parser openai`
+(gpt-oss models are natively tool-call/harmony aware in vLLM, so no
+separate `--reasoning-parser` flag is needed). No real API key is needed -
+vLLM doesn't check it by default, so a placeholder value is used.
 """
 
 import asyncio
@@ -70,14 +70,12 @@ from agentscope.tool import Toolkit
 # ---------------------------------------------------------------------
 # 0. Local vLLM server config (OpenAI-compatible endpoint)
 #    Started with e.g.:
-#      vllm serve Qwen/Qwen3-32B-FP8 --port 8000 --max-model-len 32768 \
-#          --enable-auto-tool-choice --tool-call-parser hermes \
-#          --reasoning-parser qwen3
+#      vllm serve openai/gpt-oss-20b --port 8000 --max-model-len 32768 \
+#          --enable-auto-tool-choice --tool-call-parser openai
 # ---------------------------------------------------------------------
-# TODO: Remove QWEN VLM
 
 VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://localhost:8000/v1")
-VLLM_MODEL_NAME = os.environ.get("VLLM_MODEL_NAME", "Qwen/Qwen3-32B-FP8")
+VLLM_MODEL_NAME = os.environ.get("VLLM_MODEL_NAME", "openai/gpt-oss-20b")
 VLLM_CONTEXT_SIZE = int(os.environ.get("VLLM_CONTEXT_SIZE", "32768"))
 # vLLM doesn't check the API key by default; the OpenAI client just needs
 # a non-empty string. Override VLLM_API_KEY if you've configured vLLM
@@ -384,7 +382,7 @@ def main():
         else:
             print("Incorrect!")
 
-        with open("ferver_mas_consensus_results.jsonl", "a") as f:
+        with open("/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/results/sep7_sep13/ferver_mas_consensus_results.jsonl", "a") as f:
             out = {
                 "claim": claim,
                 "evidence": evidence_text,

@@ -10,26 +10,25 @@ conda create -n mas_framework_test python=3.12
 conda activate mas_framework_test
 pip install vllm
 
-# Login to Huggingface and download Qwen/Qwen3-32B-FP8
+# Login to Huggingface and download openai/gpt-oss-20b
 hf auth login
-hf download Qwen/Qwen3-32B-FP8
+hf download openai/gpt-oss-20b
 ```
 
 Launch vLLM.
 ```bash
-vllm serve Qwen/Qwen3-32B-FP8 \
-  --port 8000 \
-  --max-model-len 32768 \
-  --enable-auto-tool-choice \
-  --tool-call-parser hermes \
-  --reasoning-parser qwen3
+vllm serve openai/gpt-oss-20b \
+    --port 8000 \
+    --max-model-len 32768 \
+    --enable-auto-tool-choice \
+    --tool-call-parser openai
 ```
 
 Other options for vLLM serve.
 
-- `--max-model-len` — cap context to fit comfortably in the B200's 183GB (raise/lower as needed; 32B-FP8 weights are ~32GB so you have plenty of headroom for KV cache).
-- `--enable-auto-tool-choice --tool-call-parser hermes` — needed if your agents will call tools (AgentScope/CAMEL toolkits use OpenAI-style function calling).
-- `--reasoning-parser qwen3` — separates Qwen3's `<think>` reasoning traces from the final answer in the API response; drop it if you don't want thinking mode.
+- `--max-model-len` — cap context to fit comfortably in the B200's 183GB (raise/lower as needed; gpt-oss-20b's native MXFP4 weights are ~13GB so you have plenty of headroom for KV cache).
+- `--enable-auto-tool-choice --tool-call-parser openai` — needed if your agents will call tools (AgentScope/CAMEL toolkits use OpenAI-style function calling). gpt-oss uses OpenAI's "harmony" response format, so it needs the `openai` tool-call parser rather than Qwen's `hermes` parser.
+- No separate `--reasoning-parser` flag is needed — gpt-oss's harmony format carries its reasoning/analysis channel natively (unlike Qwen3, which needs `--reasoning-parser qwen3` to split out its `<think>` traces).
 
 Verify vLLM running
 
@@ -53,7 +52,7 @@ Send a chat completion: Use jq in pipe for JSON parsing.
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "Qwen/Qwen3-32B-FP8",
+    "model": "openai/gpt-oss-20b",
     "messages": [{"role": "user", "content": "Say hello in one sentence."}],
     "max_tokens": 64
   }' | jq
@@ -65,7 +64,7 @@ Test tool calling (relied on by the haggle agents):
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "Qwen/Qwen3-32B-FP8",
+    "model": "openai/gpt-oss-20b",
     "messages": [{"role": "user", "content": "What is the weather in Boston?"}],
     "tools": [{
       "type": "function",
@@ -90,7 +89,7 @@ GPU sanity check — confirm vLLM loaded weights onto the GPU:
 nvidia-smi
 ```
 
-You should see a process using tens of GB of the B200's memory (matching the ~32GB FP8 weights plus KV cache).
+You should see a process using tens of GB of the B200's memory (matching the ~13GB MXFP4 weights plus KV cache).
 
 ## Datasets
 
