@@ -60,12 +60,11 @@ from agentscope.tool import Toolkit
 # ---------------------------------------------------------------------
 # 0. Local vLLM server config (OpenAI-compatible endpoint)
 #    Started with e.g.:
-#      vllm serve Qwen/Qwen3-32B-FP8 --port 8000 --max-model-len 32768 \
-#          --enable-auto-tool-choice --tool-call-parser hermes \
-#          --reasoning-parser qwen3
+#      vllm serve openai/gpt-oss-20b --port 8000 --max-model-len 32768 \
+#          --enable-auto-tool-choice --tool-call-parser openai
 # ---------------------------------------------------------------------
 VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://localhost:8000/v1")
-VLLM_MODEL_NAME = os.environ.get("VLLM_MODEL_NAME", "Qwen/Qwen3-32B-FP8")
+VLLM_MODEL_NAME = os.environ.get("VLLM_MODEL_NAME", "openai/gpt-oss-20b")
 VLLM_CONTEXT_SIZE = int(os.environ.get("VLLM_CONTEXT_SIZE", "32768"))
 # vLLM doesn't check the API key by default; the OpenAI client just needs
 # a non-empty string. Override VLLM_API_KEY if you've configured vLLM
