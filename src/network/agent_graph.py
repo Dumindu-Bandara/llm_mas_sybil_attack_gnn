@@ -306,13 +306,19 @@ async def main():
         system_prompts=[
             ATTACKER_SYS_PROMPT, ATTACKER_SYS_PROMPT, SYS_PROMPT, SYS_PROMPT
         ], 
-        attacker_idxes=[0,1]
+        attacker_idxes=[0,1], 
+        model_type="openai/gpt-oss-20b"
     )
 
 
-    query = 
-    context = 
-    first_responses = await agentgraph.afirst_generate()
+    query = "Is the following claim true or false: 'Albert Einstein is a physicist.'"
+    context = [
+        "Albert Einstein (1879-1955) was a German-born theoretical physicist who is widely held to be one of the greatest and most influential scientists of all time.",
+        "In 1921, Einstein was awarded the Nobel Prize in Physics 'for his services to theoretical physics, and especially for his discovery of the law of the photoelectric effect'.",
+        "Einstein is best known for developing the theory of relativity, but he also made important contributions to the development of the theory of quantum mechanics.",
+        "Einstein published more than 300 scientific papers and is regarded as one of the most influential physicists of the 20th century.",
+    ]
+    first_responses = await agentgraph.afirst_generate(query, context)
 
     print("Agentgraph created!")
 
