@@ -41,6 +41,7 @@ class Agent:
         self.role = "normal"
 
     def parser(self, response):
+        # Regex patter is used to catch <REASON>: ... / <ANSWER>: ... style responses
         splits = re.split(r'<[A-Z_ ]+>: ', str(response).strip())
         splits = [s for s in splits if s]
         if len(splits) == 2:
@@ -79,7 +80,7 @@ class Agent:
 
 async def main():
     system_prompt = "You are a critical thinking agent which analyses set of evidence statements and accept/reject a claim."
-    agent = Agent(system_prompt, "gpt-oss-20b")
+    agent = Agent(system_prompt, "openai/gpt-oss-20b")
 
     agent.set_role("normal")
     print(agent.get_role())
