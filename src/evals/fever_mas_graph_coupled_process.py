@@ -363,7 +363,7 @@ def score_trajectories(
     params: dict,
     n: int = N_AGENTS,
 ) -> tuple[np.ndarray, np.ndarray, list[dict]]:
-    """Run the fitted (F, Q, R) Kalman filter over the FULL trajectory
+    """Run the fitted (F, Q, R) Kalman filter over the FULL trajectory`
     (all n nodes observed, Sybils included) and turn standardized
     innovations into a per-node sybil_score.
 

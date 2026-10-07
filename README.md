@@ -91,6 +91,50 @@ nvidia-smi
 
 You should see a process using tens of GB of the B200's memory (matching the ~13GB MXFP4 weights plus KV cache).
 
+## Launch
+
+### tmux commands
+```bash
+ml tmux
+tmux new -s vLLM
+```
+
+### Step 1: Launch vLLM.
+
+```bash
+# inside tmux shell
+ml conda
+conda activate mas_framework_test
+
+vllm serve openai/gpt-oss-20b \
+    --port 8000 \
+    --max-model-len 32768 \
+    --enable-auto-tool-choice \
+    --tool-call-parser openai
+```
+
+### Step 2: Check vLLM Availability
+
+```bash
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openai/gpt-oss-20b",
+    "messages": [{"role": "user", "content": "Say hello in one sentence."}],
+    "max_tokens": 64
+  }' | jq
+```
+
+### Step 3: Run network/agent_graph.pyh
+
+```bash
+ml conda
+conda activate mas_framework_test
+python src/network/agent_graph.py
+```
+
+### 
+
 ## Datasets
 
 ### Preprocessing FEVER Dataset
