@@ -63,18 +63,6 @@ class Agent:
         self.memory = []
         self.memory.append({"role": "system", "content": system_prompt})
         self.role = "normal"
-
-    # def parser(self, response):
-    #     # Regex patter is used to catch <REASON>: ... / <ANSWER>: ... style responses
-    #     splits = re.split(r'<[A-Z_ ]+>: ', str(response).strip())
-    #     splits = [s for s in splits if s]
-    #     if len(splits) == 2:
-    #         answer = splits[-1].strip()
-    #         reason = splits[-2].strip()
-    #         self.last_response = {"answer": answer, "reason": reason}
-
-    #     else:
-    #         self.last_response = {"answer": None, "reason": response}
     
     def set_role(self, role: Literal["normal", "attacker"]): 
         self.role = role
@@ -86,9 +74,5 @@ class Agent:
         user_msg = {"role": "user", "content": prompt}
         self.memory.append(user_msg)
         response = await async_vllm_invoke(self.memory, self.model_type)
-        # self.parser(response)
-        # ai_msg = {"role": "assistant", "content": response}
-        # self.memory.append(ai_msg)
-        
         return response
 
