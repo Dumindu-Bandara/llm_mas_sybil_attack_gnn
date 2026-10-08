@@ -1,12 +1,10 @@
-import os
-import re
-import json
 import asyncio
-from pydantic import BaseModel
-
-from openai import AsyncOpenAI
+import os
 from collections.abc import Callable
 from typing import Literal
+
+from openai import AsyncOpenAI
+from pydantic import BaseModel
 
 
 class Verdict(BaseModel):
