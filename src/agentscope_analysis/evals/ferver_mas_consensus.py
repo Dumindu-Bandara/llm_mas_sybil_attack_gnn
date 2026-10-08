@@ -1,27 +1,19 @@
 import asyncio
+import json
 import os
 from collections import Counter
 from typing import Literal, Optional
-
-import json
-
-from pydantic import BaseModel, Field
 
 from agentscope.agent import Agent
 from agentscope.credential import OpenAICredential
 from agentscope.message import UserMsg
 from agentscope.model import OpenAIChatModel
 from agentscope.tool import Toolkit
+from pydantic import BaseModel, Field
 
-
-# Structured output is produced via tool-calling, so the vLLM server must be
-# started with `--enable-auto-tool-choice --tool-call-parser openai`.
 VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://localhost:8000/v1")
 VLLM_MODEL_NAME = os.environ.get("VLLM_MODEL_NAME", "openai/gpt-oss-20b")
 VLLM_CONTEXT_SIZE = int(os.environ.get("VLLM_CONTEXT_SIZE", "32768"))
-# vLLM doesn't check the API key by default; the OpenAI client just needs
-# a non-empty string. Override VLLM_API_KEY if you've configured vLLM
-# with --api-key.
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", "EMPTY")
 
 
@@ -256,8 +248,6 @@ def main():
     # }
 
     # See: https://fever.ai/dataset/fever.html#:~:text=HLT%7D%2C%0A%20%20%20%20year%20%3D%20%7B2018%7D%0A%7D-,Data%20Format,-The%20data%20is for original data format.
-
-
 
     print(len(data), "claims loaded from", fever_jsonl_file)
 
