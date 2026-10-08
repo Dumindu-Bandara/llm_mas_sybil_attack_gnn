@@ -1,56 +1,3 @@
-"""
-Multi-Agent System (MAS) for FEVER Claim Verification with AgentScope
-========================================================================
-
-Architecture
-------------
-- 4 LLM agents, fully connected (all-to-all) via explicit broadcast.
-  The installed AgentScope version (see `dependencies/agentscope`) exposes a
-  single unified `Agent` class with no `MsgHub`/`InMemoryMemory` any more, so
-  the old "auto-broadcast inside a MsgHub" trick is replaced with explicit
-  `Agent.observe()` calls that inject a Moderator recap into every agent's
-  own context.
-- Round 0: each agent independently produces a first verdict via its own
-  `reply()` call, with no recap injected beforehand, so there is no
-  cross-talk contaminating the initial vote.
-- If no supermajority forms, agents enter deliberation rounds: after each
-  round a Moderator recap (every agent's label/confidence/reasoning) is
-  broadcast to all 4 agents via `observe()`, so each agent revises its vote
-  in light of its peers' arguments on the next round.
-- Consensus rule: Byzantine-style quorum. With n=4 agents you can only
-  safely tolerate f=1 unreliable/hallucinating vote (n >= 3f+1), so a
-  verdict is finalized only once >= 3 of 4 agents agree.
-- If no quorum forms after `max_rounds`, fall back to plurality; a
-  genuine 2-2 split degrades to NOT ENOUGH INFO, since irreducible
-  disagreement among independent verifiers is itself evidence that the
-  claim is not cleanly decidable from the evidence given.
-
-FEVER uses the labels SUPPORTS / REFUTES / NOT ENOUGH INFO internally;
-we map those to True / False / "Not enough info" at the very end.
-
-Install:
-    The `dependencies/agentscope` checkout is used directly (editable/local
-    install), not the PyPI `agentscope` package - its `Agent`/`OpenAIChatModel`
-    API has diverged significantly from the old ReActAgent/MsgHub API.
-
-LLM backend: a local vLLM server exposing an OpenAI-compatible API, e.g.:
-    vllm serve openai/gpt-oss-20b \
-        --port 8000 \
-        --max-model-len 32768 \
-        --enable-auto-tool-choice \
-        --tool-call-parser openai
-
-Since vLLM's server is OpenAI-compatible, we keep AgentScope's
-OpenAIChatModel and just point its OpenAICredential at the local server via
-`base_url` (see VLLM_BASE_URL/VLLM_MODEL_NAME below) instead of
-api.openai.com. Structured output is produced via tool-calling (a
-`_GenerateStructuredOutput` tool AgentScope injects automatically), which is
-why vLLM needs `--enable-auto-tool-choice --tool-call-parser openai`
-(gpt-oss models are natively tool-call/harmony aware in vLLM, so no
-separate `--reasoning-parser` flag is needed). No real API key is needed -
-vLLM doesn't check it by default, so a placeholder value is used.
-"""
-
 import asyncio
 import os
 from collections import Counter
@@ -67,13 +14,8 @@ from agentscope.model import OpenAIChatModel
 from agentscope.tool import Toolkit
 
 
-# ---------------------------------------------------------------------
-# 0. Local vLLM server config (OpenAI-compatible endpoint)
-#    Started with e.g.:
-#      vllm serve openai/gpt-oss-20b --port 8000 --max-model-len 32768 \
-#          --enable-auto-tool-choice --tool-call-parser openai
-# ---------------------------------------------------------------------
-
+# Structured output is produced via tool-calling, so the vLLM server must be
+# started with `--enable-auto-tool-choice --tool-call-parser openai`.
 VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://localhost:8000/v1")
 VLLM_MODEL_NAME = os.environ.get("VLLM_MODEL_NAME", "openai/gpt-oss-20b")
 VLLM_CONTEXT_SIZE = int(os.environ.get("VLLM_CONTEXT_SIZE", "32768"))
@@ -83,9 +25,6 @@ VLLM_CONTEXT_SIZE = int(os.environ.get("VLLM_CONTEXT_SIZE", "32768"))
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", "EMPTY")
 
 
-# ---------------------------------------------------------------------
-# 1. Structured verdict schema - every agent must answer in this shape
-# ---------------------------------------------------------------------
 class Verdict(BaseModel):
     label: Literal["SUPPORTS", "REFUTES", "NOT_ENOUGH_INFO"] = Field(
         description="Your verdict on the claim, given ONLY the evidence provided."
@@ -107,11 +46,8 @@ LABEL_TO_OUTPUT = {
 }
 
 
-# ---------------------------------------------------------------------
-# 2. Four agents with distinct verification personas
-#    (diversity reduces correlated errors -> a better ensemble than
-#    asking the same prompt 4 times)
-# ---------------------------------------------------------------------
+# Distinct personas reduce correlated errors -> a better ensemble than asking
+# the same prompt 4 times.
 PERSONAS = {
     "LiteralMatcher": (
         "You are a literal fact-checker. You only accept a claim as SUPPORTS "
@@ -150,8 +86,6 @@ def build_agent(name: str, persona: str) -> Agent:
             "explicitly allows it."
         ),
         model=OpenAIChatModel(
-            # Point the OpenAI client at the local vLLM server instead of
-            # api.openai.com.
             credential=OpenAICredential(
                 api_key=VLLM_API_KEY,
                 base_url=VLLM_BASE_URL,
@@ -164,9 +98,6 @@ def build_agent(name: str, persona: str) -> Agent:
     )
 
 
-# ---------------------------------------------------------------------
-# 3. Consensus utilities
-# ---------------------------------------------------------------------
 def tally(votes: dict[str, Verdict]) -> Counter:
     return Counter(v.label for v in votes.values())
 
@@ -185,21 +116,16 @@ def format_votes(votes: dict[str, Verdict]) -> str:
 
 
 async def broadcast_recap(agents: list[Agent], text: str) -> None:
-    """Inject a Moderator recap into every agent's own context.
-
-    Stands in for the old MsgHub auto-broadcast: agents can only `observe()`
-    plain user/assistant text (raw replies carrying tool-call blocks are
-    rejected), so cross-agent visibility is achieved via a plain-text recap
-    built from each agent's structured verdict, rather than by re-feeding
-    agents' raw reply messages to each other.
+    """Agents can only `observe()` plain user/assistant text (raw replies
+    carrying tool-call blocks are rejected), so cross-agent visibility is
+    achieved via a plain-text recap built from each agent's structured
+    verdict, rather than by re-feeding agents' raw reply messages to each
+    other.
     """
     recap = UserMsg("Moderator", text)
     await asyncio.gather(*(agent.observe(recap) for agent in agents))
 
 
-# ---------------------------------------------------------------------
-# 4. The verification pipeline
-# ---------------------------------------------------------------------
 async def verify_claim(
     claim: str,
     evidence: str,
@@ -214,7 +140,7 @@ async def verify_claim(
         "Give your independent verdict using the structured schema."
     )
 
-    # ---- Round 0: fully independent votes (no recap yet -> no cross-talk) ----
+    # Round 0: no recap is broadcast before this, so votes are fully independent.
     msg0 = UserMsg("user", task_prompt)
     round0_replies = await asyncio.gather(
         *(agent.reply(msg0, structured_schema=Verdict) for agent in agents)
@@ -228,7 +154,6 @@ async def verify_claim(
     counts = tally(votes)
     winner = check_quorum(counts, quorum)
 
-    # ---- Deliberation rounds: all-to-all via explicit recap broadcast ----
     round_no = 0
     if winner is None:
         await broadcast_recap(
@@ -249,8 +174,6 @@ async def verify_claim(
                 f"Deliberation round {round_no}: give your updated verdict "
                 "using the required schema.",
             )
-            # Sent identically to all 4 agents -> a synchronous voting
-            # round.
             replies = await asyncio.gather(
                 *(
                     agent.reply(deliberate_msg, structured_schema=Verdict)
@@ -272,12 +195,13 @@ async def verify_claim(
                     "No quorum yet (need 3/4 agreement). One more round.",
                 )
 
-    # ---- Fallback: plurality, tie -> NOT_ENOUGH_INFO ----
+    # No quorum: fall back to plurality. A tie means irreducible disagreement,
+    # so default to NOT_ENOUGH_INFO.
     if winner is None:
         ranked = counts.most_common()
         top_label, top_n = ranked[0]
         if len(ranked) > 1 and ranked[1][1] == top_n:
-            winner = "NOT_ENOUGH_INFO"  # genuine disagreement -> safest default
+            winner = "NOT_ENOUGH_INFO"
         else:
             winner = top_label
 
@@ -291,15 +215,8 @@ async def verify_claim(
     }
 
 
-# ---------------------------------------------------------------------
-# 5. Example run on a FEVER-style sample
-#    (real FEVER JSONL rows look like:
-#     {"id": ..., "claim": "...", "label": "SUPPORTS",
-#      "evidence": [[[annotation_id, evidence_id, "Wiki_Page", sent_id], ...]]}
-#     -- you still need a retrieval step to turn (Wiki_Page, sent_id)
-#     pairs into evidence TEXT; this pipeline assumes that's already done
-#     and you're passing in resolved evidence sentences as a string.)
-# ---------------------------------------------------------------------
+# Expects already-resolved evidence text; raw FEVER rows only contain
+# (Wiki_Page, sent_id) references and need a retrieval step first.
 async def example_main():
     sample = {
         "claim": "Nikolaj Coster-Waldau worked with the Fox Broadcasting Company.",
@@ -323,7 +240,7 @@ async def example_main():
 def main():
     fever_jsonl_file = "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/processed_shared_task_dev.jsonl"
 
-    # TODO: Test with new processed_shared_task_dev.jsonl file. 
+    # TODO: Test with new processed_shared_task_dev.jsonl file.
     with open(fever_jsonl_file, 'r') as f:
         data = [json.loads(line) for line in f]
 
@@ -346,7 +263,6 @@ def main():
 
     correct = 0
 
-    # Remove the existing results file if it exists
     if os.path.exists("ferver_mas_consensus_results.jsonl"):
         os.remove("ferver_mas_consensus_results.jsonl")
 
@@ -377,7 +293,7 @@ def main():
         print(f"Ground Truth label: {gt_label}")
 
         if final_label == gt_label:
-            print("Correct!")   
+            print("Correct!")
             correct += 1
         else:
             print("Incorrect!")
