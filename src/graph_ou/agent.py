@@ -14,7 +14,7 @@ class Verdict(BaseModel):
     ]  # fixed output label set for FEVER
 
 
-async def async_vllm_invoke(prompt: list[dict], model_type: str):
+async def async_vllm_invoke(prompt: list[dict], model_type: str, verdict: Verdict):
     async_openai_client = AsyncOpenAI(
         api_key=os.getenv("VLLM_API_KEY", "EMPTY"),
         base_url=os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1"),
@@ -28,7 +28,7 @@ async def async_vllm_invoke(prompt: list[dict], model_type: str):
         reasoning_effort="medium",  # low | medium | high
         response_format={
             "type": "json_schema",
-            "json_schema": {"name": "verdict", "schema": Verdict.model_json_schema()},
+            "json_schema": {"name": "verdict", "schema": verdict.model_json_schema()},
         },
     )
 
