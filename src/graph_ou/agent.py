@@ -39,12 +39,13 @@ async def async_vllm_invoke(prompt: list[dict], model_type: str, verdict: Verdic
 
 
 class Agent:
-    def __init__(self, system_prompt, model_type):
+    def __init__(self, system_prompt, model_type, verdict):
         self.model_type = model_type
         self.system_prompt = system_prompt
         self.memory = []
         self.memory.append({"role": "system", "content": system_prompt})
         self.role = "normal"
+        self.verdict = verdict
 
     def set_role(self, role: Literal["normal", "attacker"]):
         self.role = role
@@ -55,7 +56,7 @@ class Agent:
     async def async_chat(self, prompt):
         user_msg = {"role": "user", "content": prompt}
         self.memory.append(user_msg)
-        response = await async_vllm_invoke(self.memory, self.model_type)
+        response = await async_vllm_invoke(self.memory, self.model_type, self.verdict)
         return response
 
 
