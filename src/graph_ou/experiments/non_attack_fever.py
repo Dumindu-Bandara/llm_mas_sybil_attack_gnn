@@ -1,96 +1,19 @@
-import json
-import numpy as np
 import asyncio
-from typing import Optional
-# Adjacency Matrix
-# Initialize agent (memory, role, system_prompt, model_type)
-# Initial round
+import json
+from collections import Counter
+from typing import Literal
 
-
-# Initialize agents
-# Initial response
-# Votes
-# Tally votes
-# If winner exists?
-
-# Rounds (if winner is none)
-# Broadcast the recap
-# Updated verdict
-# Votes
-# Count and tally votes
-# winner (Loop back)
-
-# If winner is not none after max rounds
-# Plurality winner
-
-# return {claim, final_label, final_output, rounds_run, vote_history, final_tally}
-
-
-# AgentGraph
-# Adjacency matrix (1-N)
-# List of Agents (1-N)
-# Broadcast
-# Collect responses
-
-# Fever_Verify_Claim
-# take agent graph
-# Braodcaset 1 (task)
-# collect -> tally - quoram -> winner? or not
-
-# if not recap -> tally -> quoram recap for N rounds
-
-# fianly count winners
-
-
-# def neighbour_recap(graph: AgentGraph, i: int, verdicts: list[dict]) -> str:
-#     lines = [f"- Agent {j}: answer={verdicts[j]['answer']}; reason={verdicts[j]['reason']}"
-#              for j in graph.neighbors(i)]
-#     peers = "\n".join(lines) or "(no neighbours)"
-#     return (f"Verdicts from agents you are connected to:\n{peers}\n\n"
-#             f"Your previous verdict: answer={verdicts[i]['answer']}; reason={verdicts[i]['reason']}\n"
-#             "Give your updated verdict.")
-
-
-# def majority_only_recap(graph: AgentGraph, i: int, verdicts: list[dict]) -> str:
-#     from collections import Counter
-#     counts = Counter(verdicts[j]["answer"] for j in graph.neighbors(i))
-#     return f"Your neighbours voted: {dict(counts)}. Give your updated verdict."
-
-
-# main
-# Load fever json file  data = [json.loads(line) for line in f]
-# correct = 0 at initially
-# Result file initialization.
-# Create the evidence claim
-# evidence_text = " ".join(sample["evidence_text"])
-# print(f"\nClaim {i+1}/{len(data)}: {claim}")
-# print(f"Number of evidence sentences: {len(sample['evidence_text'])}")
-# print(f"Evidence: {evidence_text}")
-# print(f"Ground truth label: {sample['label']}")
-# results run_verify_claim
-# Get the final output. If matches correct else incorrect.
-# Write to the result file
-# out = {
-#     "claim": claim,
-#     "evidence": evidence_text,
-#     "ground_truth_label": gt_label,
-#     "final_label": final_label,
-#     "final_output": result['final_output'],
-#     "rounds_run": result['rounds_run'],
-#     "final_tally": result['final_tally'],
-#     "correct": final_label == gt_label
-# }
-# My suggestion:
-# Take and agent graph as the input.
-# Create a dataloader class
-# Run on the agentgraph.
-# quoram, tally, pluraity
-# claim at the end
+import numpy as np
+from pydantic import BaseModel
 
 from graph_ou.agent import Agent, AgentGraph
-from pydantic import BaseModel
-from typing import Literal
-from collections import Counter
+
+
+# Next action items summary. 
+# TODO 1: Input, output, docstrings
+# TODO 2: Tests using pytest. 
+# TODO 3: Logging functionality.
+# TODO 4: Sybils vs Naive attack success rates. 
 
 def build_recap_prompt(graph: AgentGraph, i: int, verdicts: list[dict]) -> str:
     def format_response(v: dict) -> str:
@@ -110,10 +33,8 @@ def build_recap_prompt(graph: AgentGraph, i: int, verdicts: list[dict]) -> str:
     )
 
 class FeverVerdict(BaseModel):
-    reason: str  # brief public justification shared with agents.
-    answer: Literal[
-        "SUPPORTS", "REFUTES", "NOT_ENOUGH_INFO"
-    ]  # fixed output label set for FEVER
+    reason: str
+    answer: Literal["SUPPORTS", "REFUTES", "NOT_ENOUGH_INFO"]
 
 class FeverDataset:
     def __init__(self, data_path):
@@ -133,8 +54,8 @@ class FeverClaimVerifier:
         self.correct = 0
         self.agentgraph = agentgraph
         self.log_path = log_path
-        # create a logger
-        # Add these parameters
+        # TODO: create a logger
+        # TODO: Add these parameters to the class constructer.
         self.max_rounds = 3
         self.quorum = 3
 
@@ -146,12 +67,11 @@ class FeverClaimVerifier:
             result = await self.verify_claim(sample)
 
             # TODO: Add Ground Truth Label Comparison and Metrics here.
-
-        # if result == gt correct +1 else 0
-        pass
+            # if result == gt correct +1 else 0
 
     async def verify_claim(self, sample):
-        # add logging (print if logging true)
+        
+        # TODO: Add logging (print if logging true)
         claim = sample["claim"]
         evidence = " ".join(sample["evidence_text"])
 
@@ -162,7 +82,6 @@ class FeverClaimVerifier:
         )
 
         round0_replies = await self.agentgraph.broadcast(task_prompt)
-        # recap format???
         round0_replies = [self.agentgraph.parse_verdict(reply[0]) for reply in round0_replies]
         tally = self.count(round0_replies)
         winner = self.check_quorum(tally)
@@ -176,7 +95,6 @@ class FeverClaimVerifier:
         while winner is None and round_no < self.max_rounds:
             round_no += 1
 
-            # prev_round replies
             replies = await self.agentgraph.recap(prev_replies)
             replies = [self.agentgraph.parse_verdict(reply[0]) for reply in replies]
             tally = self.count(replies)
