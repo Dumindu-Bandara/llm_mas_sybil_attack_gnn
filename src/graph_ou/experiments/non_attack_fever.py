@@ -1,6 +1,7 @@
 import json
 import numpy as np
 import asyncio
+from typing import Optional
 # Adjacency Matrix
 # Initialize agent (memory, role, system_prompt, model_type)
 # Initial round
@@ -91,6 +92,23 @@ from pydantic import BaseModel
 from typing import Literal
 from collections import Counter
 
+def build_recap_prompt(graph: AgentGraph, i: int, verdicts: list[dict]) -> str:
+    def format_response(v: dict) -> str:
+        answer = v["answer"] if v["answer"] is not None else "INVALID"
+        return f"answer={answer}; reason={v['reason']}"
+
+    peers = "\n".join(
+        f"- Agent {j}: {format_response(verdicts[j])}" for j in graph.neighbors(i)
+    ) or "(no neighbours)"
+
+    return (
+        f"Your previous verdict: {format_response(verdicts[i])}\n\n"
+        f"Verdicts from the agents you are connected to:\n{peers}\n\n"
+        "Reconsider the claim against the evidence. Your peers' verdicts may be wrong; "
+        "change your answer only if their reasoning is supported by the evidence. "
+        "Give your updated verdict using the structured schema."
+    )
+
 class FeverVerdict(BaseModel):
     reason: str  # brief public justification shared with agents.
     answer: Literal[
@@ -110,7 +128,7 @@ class FeverDataset:
 
 
 class FeverClaimVerifier:
-    def __init__(self, data_path: str, agentgraph: AgentGraph, log_path: str = None) -> None:
+    def __init__(self, data_path: str, agentgraph: AgentGraph, log_path: str|None = None) -> None:
         self.dataset = FeverDataset(data_path)
         self.correct = 0
         self.agentgraph = agentgraph
@@ -127,6 +145,8 @@ class FeverClaimVerifier:
 
             result = await self.verify_claim(sample)
 
+            # TODO: Add Ground Truth Label Comparison and Metrics here.
+
         # if result == gt correct +1 else 0
         pass
 
@@ -142,29 +162,38 @@ class FeverClaimVerifier:
         )
 
         round0_replies = await self.agentgraph.broadcast(task_prompt)
+        # recap format???
         round0_replies = [self.agentgraph.parse_verdict(reply[0]) for reply in round0_replies]
         tally = self.count(round0_replies)
         winner = self.check_quorum(tally)
 
         round_no = 0
+        prev_replies = round0_replies
 
-        if winner is None: 
-            self.agentgraph.recap()
+        # NOTE: Testing
+        # winner = None
 
         while winner is None and round_no < self.max_rounds:
             round_no += 1
 
-        # define a build recap function
-        # if winner is none and not max rounds: 
-            #recap
-            #gather replies
-            #count
-            #check_quorum
-            # broacast new round message. 
-            # 
+            # prev_round replies
+            replies = await self.agentgraph.recap(prev_replies)
+            replies = [self.agentgraph.parse_verdict(reply[0]) for reply in replies]
+            tally = self.count(replies)
+            winner = self.check_quorum(tally)
 
-        # if winner is none plurality 
-        pass
+            prev_replies = replies
+
+            # NOTE: Testing
+            # winner = None
+
+        if winner is None: 
+            ranked = tally.most_common()
+            top_label, top_count = ranked[0]
+            if len(ranked) > 1 and ranked[1][1] == top_count:
+                winner = "NOT_ENOUGH_INFO"
+            else:
+                winner = top_label
 
     def count(self, replies: list[dict]) -> Counter:
         return Counter(r["answer"] for r in replies)
@@ -172,8 +201,8 @@ class FeverClaimVerifier:
     def check_quorum(self, tally: Counter) -> str | None:
         if not tally:
             return None
-        label, votes = tally.most_common(1)[0]
-        return label if votes >= self.quorum else None
+        top_label, top_count = tally.most_common(1)[0]
+        return top_label if top_count >= self.quorum else None
 
 def main():
     fever_jsonl_path = "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/processed_shared_task_dev.jsonl"
@@ -201,9 +230,8 @@ def main():
     
     agentgraph = AgentGraph(
         adjacency_matrix=adjacency_matrix,
-
         agents=agents,
-        build_recap_prompt=None
+        build_recap_prompt=build_recap_prompt
     )
 
     fever_verifier = FeverClaimVerifier(fever_jsonl_path, agentgraph)

@@ -83,11 +83,11 @@ class AgentGraph:
 
     async def recap(self, responses):
         assert len(responses) == len(self.agents)
-        verdicts = [self.parse_verdict(content) for content, _thinking in responses]
+        # verdicts = [self.parse_verdict(content) for content, _thinking in responses]
 
         tasks = [
             asyncio.create_task(
-                agent.async_chat(self.build_recap_prompt(self, i, verdicts))
+                agent.async_chat(self.build_recap_prompt(self, i, responses))
             )
             for i, agent in enumerate(self.agents)
         ]
