@@ -14,6 +14,8 @@ from graph_ou.agent import Agent, AgentGraph
 # TODO 3: Logging functionality.
 # TODO 4: Sybils vs Naive attack success rates.
 
+# ISSUE 1: parse_verdict set answer to None. Which can win/force a tie??
+
 
 def build_recap_prompt(
     graph: AgentGraph, i: int, verdicts: list[dict[str, str | None]]
@@ -37,6 +39,8 @@ def build_recap_prompt(
         "Give your updated verdict using the structured schema."
     )
 
+def normalize_label(label: str | None) -> str | None:
+    return label.replace("_", " ") if label is not None else None
 
 class FeverVerdict(BaseModel):
     reason: str
@@ -91,7 +95,7 @@ class FeverClaimVerifier:
 
             result = await self.verify_claim(sample)
 
-            if result["label"] == sample["label"]:
+            if normalize_label(result["label"]) == normalize_label(sample["label"]):
                 correct += 1
 
             self.agentgraph.reset()
