@@ -21,7 +21,7 @@ LOGGING = {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "detailed",
-            "filename": "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/src/graph_ou/logs/app.log",
+            "filename": "",
             "maxBytes": 10_000_000,     # 10 MB per file
             "backupCount": 5,           # keep app.log.1 ... app.log.5
             "encoding": "utf-8",
@@ -34,10 +34,11 @@ LOGGING = {
     },
     # Levels only: no "handlers" key, propagate stays True (the default)
     "loggers": {
-        "myapp":    {"level": "DEBUG"},
+        "graph_ou": {"level": "DEBUG"},
         "__main__": {"level": "DEBUG"},
     },
 }
 
-def setup_logging():
+def setup_logging(log_file: str) -> None:
+    LOGGING["handlers"]["file"]["filename"] = log_file
     logging.config.dictConfig(LOGGING)
