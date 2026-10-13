@@ -39,8 +39,10 @@ def build_recap_prompt(
         "Give your updated verdict using the structured schema."
     )
 
+
 def normalize_label(label: str | None) -> str | None:
     return label.replace("_", " ") if label is not None else None
+
 
 class FeverVerdict(BaseModel):
     reason: str
@@ -75,16 +77,19 @@ class FeverDataset:
 
 class FeverClaimVerifier:
     def __init__(
-        self, data_path: str, agentgraph: AgentGraph, log_path: str | None = None
+        self,
+        data_path: str,
+        agentgraph: AgentGraph,
+        max_rounds: int = 3,
+        quorum: int = 3,
+        log_path: str | None = None,
     ) -> None:
         self.dataset = FeverDataset(data_path)
 
         self.agentgraph = agentgraph
         self.log_path = log_path
-        # TODO: create a logger
-        # TODO: Add these parameters to the class constructer.
-        self.max_rounds = 3
-        self.quorum = 3
+        self.max_rounds = max_rounds
+        self.quorum = quorum
 
     async def eval_fever(self) -> dict[str, float]:
 
