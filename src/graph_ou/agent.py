@@ -6,6 +6,8 @@ from typing import Literal
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
+import numpy as np
+
 
 class Verdict(BaseModel):
     reason: str  # brief public justification shared with agents.
@@ -14,7 +16,9 @@ class Verdict(BaseModel):
     ]  # fixed output label set for FEVER
 
 
-async def async_vllm_invoke(prompt: list[dict], model_type: str, verdict: Verdict):
+async def async_vllm_invoke(
+    prompt: list[dict[str, str]], model_type: str, verdict: type[BaseModel]
+) -> tuple[str | None, str | None]:
     async_openai_client = AsyncOpenAI(
         api_key=os.getenv("VLLM_API_KEY", "EMPTY"),
         base_url=os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1"),
@@ -39,21 +43,32 @@ async def async_vllm_invoke(prompt: list[dict], model_type: str, verdict: Verdic
 
 
 class Agent:
-    def __init__(self, system_prompt, model_type, verdict):
+    def __init__(
+        self,
+        system_prompt: str,
+        model_type: str,
+        verdict: type[BaseModel],
+        role: Literal["normal", "attacker"] = "normal",
+    ) -> None:
         self.model_type = model_type
         self.system_prompt = system_prompt
-        self.memory = []
-        self.memory.append({"role": "system", "content": system_prompt})
-        self.role = "normal"
+        self.role = role
         self.verdict = verdict
 
-    def set_role(self, role: Literal["normal", "attacker"]):
+        self.memory: list[dict[str, str]] = []
+        self.memory.append({"role": "system", "content": self.system_prompt})
+
+    def set_role(self, role: Literal["normal", "attacker"]) -> None:
         self.role = role
 
-    def get_role(self):
+    def get_role(self) -> Literal["normal", "attacker"]:
         return self.role
 
-    async def async_chat(self, prompt):
+    def reset(self) -> None:
+        self.memory = []
+        self.memory.append({"role": "system", "content": self.system_prompt})
+
+    async def async_chat(self, prompt: str) -> tuple[str | None, str | None]:
         user_msg = {"role": "user", "content": prompt}
         self.memory.append(user_msg)
         response = await async_vllm_invoke(self.memory, self.model_type, self.verdict)
@@ -66,22 +81,22 @@ RecapPromptBuilder = Callable[["AgentGraph", int, list[dict]], str]
 class AgentGraph:
     def __init__(
         self,
-        adjacency_matrix,
+        adjacency_matrix: np.ndarray,
         agents: list[Agent],
         build_recap_prompt: RecapPromptBuilder,
-    ):
+    ) -> None:
         self.adjacency_matrix = adjacency_matrix
         self.agents = agents
         self.build_recap_prompt = build_recap_prompt
 
         assert self.adjacency_matrix.shape[0] == len(agents)
 
-    async def broadcast(self, prompt):
+    async def broadcast(self, prompt: str) -> list[tuple[str | None, str | None]]:
         tasks = [asyncio.create_task(agent.async_chat(prompt)) for agent in self.agents]
         # gather returns results in input order, so responses[k] belongs to self.agents[k]
         return await asyncio.gather(*tasks)
 
-    async def recap(self, responses):
+    async def recap(self, responses: list[dict]) -> list[tuple[str | None, str | None]]:
         assert len(responses) == len(self.agents)
         # verdicts = [self.parse_verdict(content) for content, _thinking in responses]
 
@@ -94,7 +109,7 @@ class AgentGraph:
         return await asyncio.gather(*tasks)
 
     @staticmethod
-    def parse_verdict(content: str) -> dict:
+    def parse_verdict(content: str | None) -> dict[str, str | None]:
         try:
             return Verdict.model_validate_json(content).model_dump()
         except Exception:
@@ -104,3 +119,7 @@ class AgentGraph:
         # Row i = the agents that agent i listens to (A[i][j] != 0 means j -> i) (incoming edges)
         n = len(self.agents)
         return [j for j in range(n) if j != i and self.adjacency_matrix[i][j] != 0]
+
+    def reset(self) -> None:
+        for agent in self.agents:
+            agent.reset()
