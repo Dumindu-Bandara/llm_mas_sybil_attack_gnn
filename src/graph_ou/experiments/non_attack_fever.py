@@ -9,14 +9,16 @@ from pydantic import BaseModel
 from graph_ou.agent import Agent, AgentGraph
 
 # Next action items summary.
-# TODO 1: Input, output, docstrings
+# DONE 1: Input, output, docstrings
 # TODO 2: Tests using pytest.
 # TODO 3: Logging functionality.
 # TODO 4: Sybils vs Naive attack success rates.
 
 
-def build_recap_prompt(graph: AgentGraph, i: int, verdicts: list[dict]) -> str:
-    def format_response(v: dict) -> str:
+def build_recap_prompt(
+    graph: AgentGraph, i: int, verdicts: list[dict[str, str | None]]
+) -> str:
+    def format_response(v: dict[str, str | None]) -> str:
         answer = v["answer"] if v["answer"] is not None else "INVALID"
         return f"answer={answer}; reason={v['reason']}"
 
@@ -49,10 +51,16 @@ class FeverSample(TypedDict):
     evidence_text: list[str]
 
 
+class ClaimResult(TypedDict):
+    label: Literal["SUPPORTS", "REFUTES", "NOT_ENOUGH_INFO"]
+    num_rounds: int
+    tally: Counter[str | None]
+
+
 class FeverDataset:
     def __init__(self, data_path: str) -> None:
         with open(data_path, "r") as f:
-            self.data = [json.loads(line) for line in f]
+            self.data: list[FeverSample] = [json.loads(line) for line in f]
 
     def __len__(self) -> int:
         return len(self.data)
@@ -74,7 +82,7 @@ class FeverClaimVerifier:
         self.max_rounds = 3
         self.quorum = 3
 
-    async def eval_fever(self):
+    async def eval_fever(self) -> dict[str, float]:
 
         correct = 0
 
@@ -86,9 +94,11 @@ class FeverClaimVerifier:
             if result["label"] == sample["label"]:
                 correct += 1
 
+            self.agentgraph.reset()
+
         return {"success_rate": correct / len(self.dataset)}
 
-    async def verify_claim(self, sample: FeverSample):
+    async def verify_claim(self, sample: FeverSample) -> ClaimResult:
 
         # TODO: Add logging (print if logging true)
         claim = sample["claim"]
@@ -131,13 +141,13 @@ class FeverClaimVerifier:
         return {
             "label": winner,
             "num_rounds": round_no,
-            "tally": ranked,
+            "tally": tally,
         }
 
-    def count(self, replies: list[dict]) -> Counter:
+    def count(self, replies: list[dict[str, str | None]]) -> Counter[str | None]:
         return Counter(r["answer"] for r in replies)
 
-    def check_quorum(self, tally: Counter) -> str | None:
+    def check_quorum(self, tally: Counter[str | None]) -> str | None:
         if not tally:
             return None
         top_label, top_count = tally.most_common(1)[0]
