@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from collections import Counter
 from typing import Literal, TypedDict
 
@@ -7,15 +8,17 @@ import numpy as np
 from pydantic import BaseModel
 
 from graph_ou.agent import Agent, AgentGraph
+from graph_ou.logging_config import setup_logging
+
+logger = logging.getLogger(__name__)
 
 # Next action items summary.
 # DONE 1: Input, output, docstrings
-# TODO 2: Tests using pytest.
-# TODO 3: Logging functionality.
+# TODO 2: Logging functionality.
+# TODO 3: Tests using pytest.
 # TODO 4: Sybils vs Naive attack success rates.
 
 # ISSUE 1: parse_verdict set answer to None. Which can win/force a tie??
-
 
 def build_recap_prompt(
     graph: AgentGraph, i: int, verdicts: list[dict[str, str | None]]
@@ -91,6 +94,8 @@ class FeverClaimVerifier:
         self.max_rounds = max_rounds
         self.quorum = quorum
 
+        
+
     async def eval_fever(self) -> dict[str, float]:
 
         correct = 0
@@ -109,7 +114,6 @@ class FeverClaimVerifier:
 
     async def verify_claim(self, sample: FeverSample) -> ClaimResult:
 
-        # TODO: Add logging (print if logging true)
         claim = sample["claim"]
         evidence = " ".join(sample["evidence_text"])
 
@@ -164,6 +168,10 @@ class FeverClaimVerifier:
 
 
 def main():
+
+    setup_logging()
+    logger.info("FeverClaimVerifier Started.")
+
     fever_jsonl_path = "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/processed_shared_task_dev.jsonl"
 
     fever_dataset = FeverDataset(fever_jsonl_path)
