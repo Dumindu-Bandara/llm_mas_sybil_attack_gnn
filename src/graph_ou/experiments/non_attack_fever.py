@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 # TODO 4: Sybils vs Naive attack success rates.
 
 # ISSUE 1: parse_verdict set answer to None. Which can win/force a tie??
+# ISSUE 2: Round count 0 (initial), n deleberation rounds.
+
 
 def build_recap_prompt(
     graph: AgentGraph, i: int, verdicts: list[dict[str, str | None]]
@@ -94,8 +96,6 @@ class FeverClaimVerifier:
         self.max_rounds = max_rounds
         self.quorum = quorum
 
-        
-
     async def eval_fever(self) -> dict[str, float]:
 
         correct = 0
@@ -105,8 +105,20 @@ class FeverClaimVerifier:
 
             result = await self.verify_claim(sample)
 
-            if normalize_label(result["label"]) == normalize_label(sample["label"]):
+            is_matched = normalize_label(result["label"]) == normalize_label(
+                sample["label"]
+            )
+
+            if is_matched:
                 correct += 1
+
+            logger.info(
+                "Sample %d: Result=%s GT=%s Correct=%d",
+                i,
+                result["label"],
+                sample["label"],
+                is_matched,
+            )
 
             self.agentgraph.reset()
 
@@ -130,6 +142,9 @@ class FeverClaimVerifier:
         tally = self.count(round0_replies)
         winner = self.check_quorum(tally)
 
+        logger.info("Round 0: tally=%s", dict(tally))
+        logger.info("Round 0: winner=%s (quorum=%d)", winner, self.quorum)
+
         round_no = 0
         prev_replies = round0_replies
 
@@ -141,15 +156,36 @@ class FeverClaimVerifier:
             tally = self.count(replies)
             winner = self.check_quorum(tally)
 
+            logger.info("Round %d: tally=%s", round_no, dict(tally))
+            logger.info(
+                "Round %d: winner=%s (quorum=%d)", round_no, winner, self.quorum
+            )
+
             prev_replies = replies
 
         if winner is None:
             ranked = tally.most_common()
             top_label, top_count = ranked[0]
+
+            logger.info(
+                "No quorum after %d rounds; falling back to plurality vote: ranked=%s",
+                round_no,
+                ranked,
+            )
             if len(ranked) > 1 and ranked[1][1] == top_count:
                 winner = "NOT_ENOUGH_INFO"
+
+                logger.info(
+                    "Tie between %s and %s at %d votes; winner=%s. There can be three-way ties.",
+                    top_label,
+                    ranked[1][0],
+                    top_count,
+                    winner,
+                )
             else:
                 winner = top_label
+
+                logger.info("Plurality winner=%s with %d votes", winner, top_count)
 
         return {
             "label": winner,
@@ -169,7 +205,8 @@ class FeverClaimVerifier:
 
 def main():
 
-    setup_logging()
+    log_path = "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/src/graph_ou/logs/graph_ou.log"
+    setup_logging(log_path)
     logger.info("FeverClaimVerifier Started.")
 
     fever_jsonl_path = "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/datasets/FEVER/processed_shared_task_dev.jsonl"
