@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Next action items summary.
 # DONE 1: Input, output, docstrings
-# TODO 2: Logging functionality.
+# DONE 2: Logging functionality.
 # TODO 3: Tests using pytest.
 # TODO 4: Sybils vs Naive attack success rates.
 
