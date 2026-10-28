@@ -223,3 +223,6 @@ related_work/
 # Datasets
 datasets/
 dependencies/
+
+# PDF
+*.pdf
