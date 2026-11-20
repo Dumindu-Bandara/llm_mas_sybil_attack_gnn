@@ -35,6 +35,22 @@
                 "VLLM_BASE_URL": "http://localhost:8000/v1",
                 "VLLM_API_KEY": "EMPTY"
             }
+        },
+        {
+            "name": "FEVER MAS Debugger",
+            "type": "debugpy",
+            "request": "launch",
+            "cwd": "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/src/graph_ou",
+            "program": "/blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn/src/graph_ou/experiments/non_attack_fever.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "stopOnEntry": false,
+            "python": "/blue/prabhat/duminduaelamurem/.conda/envs/mas_framework_test/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "VLLM_BASE_URL": "http://localhost:8000/v1",
+                "VLLM_API_KEY": "EMPTY"
+            }
         }
     ]
 }

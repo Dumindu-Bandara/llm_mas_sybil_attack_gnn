@@ -1,14 +1,10 @@
 import asyncio
 import json
-import sys
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from graph_ou_method import AgentGraph
+from graph_ou.agent import AgentGraph
 
 
 class FakeAgent:
@@ -73,9 +69,9 @@ def test_broadcast_sends_same_prompt_and_keeps_agent_order():
 def test_recap_sends_each_agent_its_own_prompt_from_the_builder():
     graph, agents = make_graph()
     previous = [
-        ('{"reason": "a", "answer": "SUPPORTS"}', None),
-        ('{"reason": "b", "answer": "REFUTES"}', None),
-        ('{"reason": "c", "answer": "NOT_ENOUGH_INFO"}', None),
+        {"reason": "a", "answer": "SUPPORTS"},
+        {"reason": "b", "answer": "REFUTES"},
+        {"reason": "c", "answer": "NOT_ENOUGH_INFO"},
     ]
 
     responses = asyncio.run(graph.recap(previous))
@@ -89,7 +85,7 @@ def test_recap_sends_each_agent_its_own_prompt_from_the_builder():
 def test_recap_uses_the_builder_given_to_the_instance():
     graph, agents = make_graph(builder=lambda graph, i, verdicts: f"custom {i}")
 
-    asyncio.run(graph.recap([('{"reason": "r", "answer": "SUPPORTS"}', None)] * 3))
+    asyncio.run(graph.recap([{"reason": "r", "answer": "SUPPORTS"}] * 3))
 
     assert [agent.prompts for agent in agents] == [["custom 0"], ["custom 1"], ["custom 2"]]
 
@@ -98,4 +94,4 @@ def test_recap_rejects_wrong_number_of_responses():
     graph, _ = make_graph()
 
     with pytest.raises(AssertionError):
-        asyncio.run(graph.recap([('{"reason": "r", "answer": "SUPPORTS"}', None)]))
+        asyncio.run(graph.recap([{"reason": "r", "answer": "SUPPORTS"}]))

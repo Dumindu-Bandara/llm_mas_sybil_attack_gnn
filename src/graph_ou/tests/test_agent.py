@@ -1,18 +1,18 @@
 import asyncio
 import os
-import sys
-from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-import graph_ou_method
-from graph_ou_method import Agent, Verdict
+import graph_ou.agent
+from graph_ou.agent import Agent, Verdict
 
 
 def test_init_sets_system_prompt_and_defaults():
-    agent = Agent(system_prompt="You are a fact checker.", model_type="test-model")
+    agent = Agent(
+        system_prompt="You are a fact checker.",
+        model_type="test-model",
+        verdict=Verdict,
+    )
 
     assert agent.model_type == "test-model"
     assert agent.system_prompt == "You are a fact checker."
@@ -21,7 +21,7 @@ def test_init_sets_system_prompt_and_defaults():
 
 
 def test_set_role():
-    agent = Agent("sys", "test-model")
+    agent = Agent("sys", "test-model", Verdict)
 
     agent.set_role("attacker")
     assert agent.get_role() == "attacker"
@@ -33,13 +33,13 @@ def test_set_role():
 def test_async_chat_appends_user_message_and_calls_llm(monkeypatch):
     calls = []
 
-    async def fake_invoke(prompt, model_type):
-        calls.append((list(prompt), model_type))
+    async def fake_invoke(prompt, model_type, verdict):
+        calls.append((list(prompt), model_type, verdict))
         return '{"reason": "r", "answer": "SUPPORTS"}', "thinking"
 
-    monkeypatch.setattr(graph_ou_method, "async_vllm_invoke", fake_invoke)
+    monkeypatch.setattr(graph_ou.agent, "async_vllm_invoke", fake_invoke)
 
-    agent = Agent("sys", "test-model")
+    agent = Agent("sys", "test-model", Verdict)
     response = asyncio.run(agent.async_chat("Is the sky blue?"))
 
     assert response == ('{"reason": "r", "answer": "SUPPORTS"}', "thinking")
@@ -47,7 +47,7 @@ def test_async_chat_appends_user_message_and_calls_llm(monkeypatch):
         {"role": "system", "content": "sys"},
         {"role": "user", "content": "Is the sky blue?"},
     ]
-    assert calls == [(agent.memory, "test-model")]
+    assert calls == [(agent.memory, "test-model", Verdict)]
 
 
 @pytest.mark.skipif(
@@ -55,7 +55,7 @@ def test_async_chat_appends_user_message_and_calls_llm(monkeypatch):
     reason="needs a running vLLM server; set RUN_VLLM_TESTS=1 to enable",
 )
 def test_async_chat_with_live_vllm():
-    agent = Agent("sys", os.getenv("VLLM_MODEL", "openai/gpt-oss-20b"))
+    agent = Agent("sys", os.getenv("VLLM_MODEL", "openai/gpt-oss-20b"), Verdict)
     content, _thinking = asyncio.run(agent.async_chat("Is the sky blue?"))
 
     verdict = Verdict.model_validate_json(content)
