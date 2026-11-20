@@ -10,7 +10,7 @@ mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
 apptainer build --fakeroot containers/env_$(date +%F).sif containers/env.def
 ```
 
-## Run the Apptainer
+## Run the Apptainer as a Shell
 
 ```bash
 ml apptainer
@@ -20,13 +20,44 @@ HF_CACHE=/blue/prabhat/duminduaelamurem/.cache/huggingface
 apptainer shell --nv --contain \
     --bind "$PWD" \
     --bind "$HF_CACHE" \
-    --pwd "$PWD" \
+    --bind "$HOME/.claude" \
+    --bind "$HOME/.claude.json" \
     --env PYTHONPATH="$PWD/src" \
     --env HF_HOME="$HF_CACHE" \
     containers/env_2026-11-20.sif
 ```
 
 Run this from the repo root. `--contain` turns off Apptainer's default mounts of `$HOME`, `/tmp` and the host working directory, so only the repo and the Hugging Face cache are visible from the host. Inside the container, `$HOME` and `/tmp` are empty and temporary. Anything written there is lost on exit, including `~/.cache/vllm` and the Triton cache. To keep one of those, bind a host directory for it and point the matching env var (for example `TRITON_CACHE_DIR`) at it.
+
+## Run the Apptainer as a Instance
+
+```bash
+ml apptainer
+unset DBUS_SESSION_BUS_ADDRESS
+HF_CACHE=/blue/prabhat/duminduaelamurem/.cache/huggingface
+
+apptainer instance start --nv --contain \
+    --bind "$PWD" \
+    --bind "$HF_CACHE" \
+    --bind "$HOME/.claude" \
+    --bind "$HOME/.claude.json" \
+    --env PYTHONPATH="$PWD/src" \
+    --env HF_HOME="$HF_CACHE" \
+    containers/env_2026-11-20.sif sybil
+```
+
+```bash
+apptainer shell --pwd "$PWD" --env PYTHONPATH="$PWD/src" --env HF_HOME="$HF_CACHE" instance://sybil
+
+
+# or run a single command
+apptainer exec --pwd "$PWD" instance://sybil python -c "import torch; print(torch.cuda.is_available())"
+```
+
+```bash
+apptainer instance list        # see running instances
+apptainer instance stop sybil  # stop it
+```
 
 ## Verify the Apptainer Container
 
