@@ -1,8 +1,10 @@
 # Container Creation and Maintenance
 
-## Build Commands for Apptainer 
+## Build Commands for Apptainer
 
 ```bash
+ml apptainer
+
 export APPTAINER_CACHEDIR=/blue/prabhat/duminduaelamurem/.apptainer/cache
 export APPTAINER_TMPDIR=/blue/prabhat/duminduaelamurem/.apptainer/tmp
 mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
@@ -62,8 +64,8 @@ apptainer instance stop sybil  # stop it
 ## Verify the Apptainer Container
 
 ```bash
-apptainer exec --nv containers/env_*.sif python -c "import torch; print(torch.cuda.get_device_name())"
-apptainer exec --nv containers/env_*.sif vllm --version
+apptainer exec --nv containers/env_2026-11-20.sif python -c "import torch; print(torch.cuda.get_device_name())"
+apptainer exec --nv containers/env_2026-11-20.sif vllm --version
 ```
 
 ## Installing a Dependency
@@ -80,7 +82,7 @@ export UV_CACHE_DIR=/blue/prabhat/duminduaelamurem/.cache/uv
 ```
 
 | Task | Command |
-|---|---|
+| --- | --- |
 | Add a package | `uv add --no-sync networkx` |
 | Add a dev-only package | `uv add --no-sync --dev ruff` |
 | Remove a package | `uv remove --no-sync networkx` |
