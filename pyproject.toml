@@ -28,3 +28,6 @@ environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 [tool.uv.sources]
 # Same commit as the local checkout in dependencies/agentscope
 agentscope = { git = "https://github.com/agentscope-ai/agentscope.git", rev = "3c801b6b50cb3588af12d9933638166ca13a91c5" }
+
+[tool.pytest.ini_options]
+testpaths = ["src/graph_ou/tests"]
