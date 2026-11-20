@@ -15,13 +15,18 @@ apptainer build --fakeroot containers/env_$(date +%F).sif containers/env.def
 ```bash
 ml apptainer
 
-apptainer shell --nv \
-    --bind /blue \
+HF_CACHE=/blue/prabhat/duminduaelamurem/.cache/huggingface
+
+apptainer shell --nv --contain \
+    --bind "$PWD" \
+    --bind "$HF_CACHE" \
     --pwd "$PWD" \
     --env PYTHONPATH="$PWD/src" \
-    --env HF_HOME=/blue/prabhat/duminduaelamurem/.cache/huggingface \
+    --env HF_HOME="$HF_CACHE" \
     containers/env_2026-11-20.sif
 ```
+
+Run this from the repo root. `--contain` turns off Apptainer's default mounts of `$HOME`, `/tmp` and the host working directory, so only the repo and the Hugging Face cache are visible from the host. Inside the container, `$HOME` and `/tmp` are empty and temporary. Anything written there is lost on exit, including `~/.cache/vllm` and the Triton cache. To keep one of those, bind a host directory for it and point the matching env var (for example `TRITON_CACHE_DIR`) at it.
 
 ## Verify the Apptainer Container
 
@@ -85,7 +90,7 @@ Commit `pyproject.toml` and `uv.lock` together. The lock file plus `env.def` let
 To test a package before changing the lock, start the container with a temporary writable layer. It's lost on exit:
 
 ```bash
-apptainer shell --nv --writable-tmpfs --bind /blue containers/env_2026-11-20.sif
+apptainer shell --nv --contain --writable-tmpfs --bind "$PWD" --pwd "$PWD" containers/env_2026-11-20.sif
 Apptainer> uv pip install --python /opt/venv/bin/python some-package
 ```
 
