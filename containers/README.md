@@ -1,0 +1,92 @@
+# Container Creation and Maintenance
+
+## Build Commands for Apptainer 
+
+```bash
+export APPTAINER_CACHEDIR=/blue/prabhat/duminduaelamurem/.apptainer/cache
+export APPTAINER_TMPDIR=/blue/prabhat/duminduaelamurem/.apptainer/tmp
+mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
+
+apptainer build --fakeroot containers/env_$(date +%F).sif containers/env.def
+```
+
+## Run the Apptainer
+
+```bash
+ml apptainer
+
+apptainer shell --nv \
+    --bind /blue \
+    --pwd "$PWD" \
+    --env PYTHONPATH="$PWD/src" \
+    --env HF_HOME=/blue/prabhat/duminduaelamurem/.cache/huggingface \
+    containers/env_2026-11-20.sif
+```
+
+## Verify the Apptainer Container
+
+```bash
+apptainer exec --nv containers/env_*.sif python -c "import torch; print(torch.cuda.get_device_name())"
+apptainer exec --nv containers/env_*.sif vllm --version
+```
+
+## Installing a Dependency
+
+The image is read-only, so you can't update packages in place. Change the versions in `pyproject.toml` and `uv.lock` on the host, then rebuild the `.sif`. The build installs exactly what's in `uv.lock`, because `env.def` runs `uv sync --frozen`.
+
+### 1. Change the dependencies on the host
+
+Run these from the repo root, outside the container (uv is at `~/.local/bin/uv`):
+
+```bash
+cd /blue/prabhat/duminduaelamurem/wd/2026_fall/llm_mas_sybil_attack_gnn/llm_mas_sybil_attack_gnn
+export UV_CACHE_DIR=/blue/prabhat/duminduaelamurem/.cache/uv
+```
+
+| Task | Command |
+|---|---|
+| Add a package | `uv add --no-sync networkx` |
+| Add a dev-only package | `uv add --no-sync --dev ruff` |
+| Remove a package | `uv remove --no-sync networkx` |
+| Change a pinned version | edit it in `pyproject.toml`, then `uv lock` |
+| Upgrade one package within its allowed range | `uv lock --upgrade-package openai` |
+| Upgrade everything | `uv lock --upgrade` |
+
+Pass `--no-sync` to `uv add` and `uv remove`. Without it, uv also installs everything into a `.venv` in the repo, which means several GB of torch and vLLM you don't need on the host. `uv lock` never installs anything.
+
+Most packages in `pyproject.toml` are pinned with `==`. For those, `--upgrade-package` won't move them; change the pin first.
+
+### 2. Check what changed
+
+```bash
+git diff pyproject.toml
+git diff --stat uv.lock
+```
+
+Watch for changes to torch, vLLM or transformers in particular. A small bump can change model outputs between experiment runs.
+
+### 3. Rebuild the image
+
+```bash
+ml apptainer
+export APPTAINER_CACHEDIR=/blue/prabhat/duminduaelamurem/.apptainer/cache
+export APPTAINER_TMPDIR=/blue/prabhat/duminduaelamurem/.apptainer/tmp
+apptainer build --fakeroot containers/env_$(date +%F).sif containers/env.def
+```
+
+The date in the filename keeps the old image, so you can go back to it or rerun old experiments with the exact environment they used.
+
+### 4. Commit both files
+
+Commit `pyproject.toml` and `uv.lock` together. The lock file plus `env.def` let anyone rebuild the same environment.
+
+### Trying a package before committing to it
+
+To test a package before changing the lock, start the container with a temporary writable layer. It's lost on exit:
+
+```bash
+apptainer shell --nv --writable-tmpfs --bind /blue containers/env_2026-11-20.sif
+Apptainer> uv pip install --python /opt/venv/bin/python some-package
+```
+
+Use this only for quick experiments. Any results you keep should come from a rebuilt image, so they can be reproduced.

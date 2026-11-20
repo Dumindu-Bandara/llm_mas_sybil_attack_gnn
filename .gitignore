@@ -226,3 +226,6 @@ dependencies/
 
 # PDF
 *.pdf
+
+# Apptainer Containers
+*.sif

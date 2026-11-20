@@ -1,0 +1,30 @@
+[project]
+name = "llm-mas-sybil-attack-gnn"
+version = "0.1.0"
+description = "Sybil attack defense using federated GNN on LLM multi-agent systems"
+readme = "README.md"
+requires-python = "==3.12.*"          # keep in sync with PY=3.12 in containers/env.def
+dependencies = [
+    "vllm==0.24.0",                   # pins its own compatible torch
+    "agentscope",
+    "openai==2.45.0",
+    "pydantic==2.13.4",
+    "numpy==2.3.5",
+    "scipy==1.15.2",
+    "scikit-learn==1.6.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ipykernel",
+]
+
+[tool.uv]
+# Only resolve for the cluster (Linux x86_64): faster, and vLLM has no
+# macOS/Windows wheels.
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+# Same commit as the local checkout in dependencies/agentscope
+agentscope = { git = "https://github.com/agentscope-ai/agentscope.git", rev = "3c801b6b50cb3588af12d9933638166ca13a91c5" }
